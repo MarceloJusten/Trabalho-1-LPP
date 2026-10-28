@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Olaria em Tempo Real</title>
+  <style>
+    :root { --terra: #b5532c; --terra-esc: #8a3b1c; --creme: #fbf3e8; --borda: #dcc8b4; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 1180px; margin: 20px auto; padding: 0 14px; background: var(--creme); color: #2d2118; }
+    h1 { margin: 0 0 6px; font-size: 24px; color: var(--terra-esc); }
+    .cartao, .painel { background: #fff; border: 1px solid var(--borda); border-radius: 10px; padding: 12px 14px; margin: 12px 0; }
+    .cartao { max-width: 440px; margin: 60px auto; }
+    .painel p { margin: 6px 0; }
+    .layout { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 1000px) { .layout { grid-template-columns: minmax(0, 620px) minmax(0, 1fr); align-items: start; } }
+    button { padding: 9px 14px; margin: 0 6px 6px 0; border-radius: 8px; border: 1px solid var(--terra-esc);
+             background: var(--terra); color: #fff; font-weight: 600; cursor: pointer; }
+    button:hover { background: var(--terra-esc); }
+    button.claro { background: #fff; color: var(--terra-esc); }
+    button.claro:hover { background: #f3e3d3; }
+    input { padding: 9px; margin-bottom: 10px; width: 100%; border: 1px solid var(--borda); border-radius: 8px; }
+    .faixa { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; }
+    .selo { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #f3e3d3; font-size: 13px; }
+    .selo.aberta { background: #dff3df; } .selo.encerrada { background: #e3e3ee; }
+    .avisos { list-style: none; padding: 0; margin: 8px 0; }
+    .avisos li { padding: 6px 10px; margin: 4px 0; border-radius: 6px; background: #eef; }
+    .avisos li.ok { background: #dfd; } .avisos li.erro { background: #fdd; }
+    #jogo { margin: 8px 0; border-radius: 10px; overflow: hidden; line-height: 0; border: 2px solid var(--terra-esc); }
+    #jogo canvas { width: 100% !important; height: auto !important; image-rendering: pixelated; }
+    progress { vertical-align: middle; width: 120px; }
+    .placar { font-size: 14px; }
+    /* painel de eventos */
+    .eventos { border: 1px solid var(--borda); border-radius: 10px; padding: 10px 12px; background: #fff; }
+    .eventos h2 { margin: 0 0 6px; font-size: 17px; }
+    .eventos .legenda { font-size: 12px; margin: 4px 0 8px; }
+    .eventos label { font-size: 12px; display: block; margin-bottom: 6px; }
+    .eventos input { width: auto; margin: 0 6px 0 0; }
+    .eventos ul { list-style: none; padding: 0; margin: 0; max-height: 640px; overflow-y: auto;
+                  font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+    .eventos li { padding: 4px 8px; margin: 4px 0; border-left: 4px solid #999; background: #fafafa; }
+    .eventos li.pedido { border-color: #1976d2; }
+    .eventos li.fato { border-color: #2e7d32; }
+    .eventos li.recusa { border-color: #c62828; }
+    .eventos .causa, .eventos .dados { color: #666; }
+    .eventos .reacao { color: #1b5e20; }
+    .eventos .hora { color: #888; }
+    .eventos .vazio { font-size: 12px; color: #888; }
+    .contadores { margin: 4px 0 8px; }
+    .badge { display: inline-block; padding: 0 6px; border-radius: 4px; color: #fff; font-size: 11px; margin-right: 6px; }
+    .badge.emit { background: #1976d2; } .badge.on { background: #2e7d32; }
+    .chip { display: inline-block; background: #f1e6da; border-radius: 10px; padding: 1px 8px; margin: 0 4px 4px 0; font-size: 11px; }
+    footer { margin-top: 28px; font-size: 13px; color: #6b5a4c; border-top: 1px solid var(--borda); padding-top: 10px; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Tela de entrada -->
+  <section v-if="!conectado" class="cartao">
+    <h1>🏺 Olaria em Tempo Real</h1>
+    <p>Uma olaria cooperativa: argila vira telha, mas telha esquecida no forno trinca.</p>
+    <input v-model="nome" placeholder="Seu nome" @keyup.enter="entrar('jogador')">
+    <button @click="entrar('mestre')" class="claro">Entrar como Mestre</button>
+    <button @click="entrar('jogador')">Entrar como Jogador</button>
+  </section>
+
+  <!-- Tela da olaria -->
+  <main v-else>
+    <h1>🏺 Olaria em Tempo Real</h1>
+    <p class="faixa">
+      <span>{{ papel === 'mestre' ? '🎩 Mestre' : '👷 Jogador' }}: <strong>{{ nome || "Anônimo" }}</strong></span>
+      <span class="selo" :class="estado.fase">Temporada: {{ estado.fase }}</span>
+    </p>
+
+    <div class="layout">
+      <div>
+        <!-- A vila desenhada pelo Phaser aparece aqui -->
+        <div id="jogo"></div>
+
+        <section class="painel">
+          <p>🟤 Argila: <strong>{{ estado.argila }}</strong> (+{{ porMinuto }}/min) · 🧱 Telhas: <strong>{{ estado.telhas }}</strong>
+             <span v-if="estado.trincadas"> · 💥 {{ estado.trincadas }} fornada(s) trincada(s)</span></p>
+          <p>👷 Oleiros ocupados: <strong>{{ estado.trabalhadores }}/{{ estado.limite }}</strong>
+            <progress :value="estado.trabalhadores" :max="estado.limite"></progress></p>
+          <p>🏺 Fornos: {{ estado.concluidas }}/{{ estado.max_fornos }} prontos, {{ estado.em_obra }} em obra ·
+             🔥 {{ queimando }} queimando · ⏳ {{ prontas }} para retirar</p>
+        </section>
+
+        <ul class="avisos">
+          <li v-for="a in avisos" :class="a.tipo">{{ a.texto }}</li>
+        </ul>
+      </div>
+
+      <!-- PAINEL DE EVENTOS: mostra o paradigma funcionando (emit, on, causa e reação) -->
+      <section class="eventos">
+        <h2>📡 Painel de eventos</h2>
+        <p class="legenda">
+          <span class="badge emit">⬆ emit</span> este cliente PEDIU algo ao servidor ·
+          <span class="badge on">⬇ on</span> este cliente ESCUTOU um evento e reagiu
+        </p>
+        <label><input type="checkbox" v-model="ocultarProducao"> ocultar recurso.produzido (é muito frequente)</label>
+        <ul>
+          <li v-for="e in eventosVisiveis" :class="e.tipo">
+            <span class="badge" :class="e.sentido === 'enviado' ? 'emit' : 'on'">{{ e.sentido === 'enviado' ? '⬆ emit' : '⬇ on' }}</span>
+            <strong>{{ e.nome }}</strong> <span class="hora">{{ e.hora }}</span>
+            <div v-if="e.causa" class="causa">causa: {{ e.causa }}</div>
+            <div v-if="e.dados" class="dados">dados: {{ e.dados }}</div>
+            <div v-if="e.reacao" class="reacao">↪ reação: {{ e.reacao }}</div>
+          </li>
+        </ul>
+        <p v-if="!eventosVisiveis.length" class="vazio">Nenhum evento ainda. Faça uma ação.</p>
+      </section>
+    </div>
+  </main>
+
+  <footer>Desenvolvido por: Marcelo Henrique Justen e Julio Max · Linguagem de Programação e Paradigmas · 2026/2</footer>
+</div>
+
+<script src="https://unpkg.com/vue@3.5.13/dist/vue.global.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+
+<script>
+  // =====================================================================
+  //  A OLARIA DESENHADA (Phaser)
+  //  O cenário é um MAPA (Tilemap) feito no Tiled: client/assets/vila.json.
+  //  Cada método abaixo reage a UM evento do servidor e é chamado pelo
+  //  ouvir(...) correspondente, lá na aplicação (segundo <script>).
+  //  Cada forno fica no "lote" de mesmo número do id que o servidor deu.
+  // =====================================================================
+  function criarJogo() {
+    let cena = null;          // a cena, quando já estiver pronta
+    let partida = null;       // o jogo Phaser
+    const fila = [];          // chamadas feitas antes da cena existir
+    const chamar = (nome, ...args) => (cena ? cena[nome](...args) : fila.push([nome, args]));
+    const achar = (estado, id) => estado.fornos.find((f) => f.id === id);
+
+    class VilaScene extends Phaser.Scene {
+      constructor() { super("vila"); }
+
+      preload() {
+        this.load.image("tiles", "assets/tileset-vila.png");                 // peças do cenário
+        this.load.spritesheet("sprites", "assets/sprites-olaria.png",        // forno e canteiro
+          { frameWidth: 32, frameHeight: 32 });
+        this.load.tilemapTiledJSON("mapa", "assets/vila.json");              // o mapa
+      }
+
+      create() {
+        // 1) o mapa: duas camadas de peças (chão e decoração)
+        const mapa = this.make.tilemap({ key: "mapa" });
+        const tileset = mapa.addTilesetImage("tileset-vila", "tiles");   // nome no Tiled, chave da imagem
+        mapa.createLayer("chao", tileset);
+        mapa.createLayer("decoracao", tileset);
+
+        // 2) pontos marcados no mapa: onde ficam os fornos e o barreiro
+        const pontos = mapa.getObjectLayer("pontos").objects;
+        this.lotes = pontos.filter((p) => p.name.startsWith("lote"))
+          .sort((a, b) => a.name.localeCompare(b.name, "pt", { numeric: true }));
+        this.barreiro = pontos.find((p) => p.name === "barreiro");
+
+        // 3) câmera: o mapa é pequeno (pixel art), então damos zoom 2x
+        this.cameras.main.setZoom(2).centerOn(mapa.widthInPixels / 2, mapa.heightInPixels / 2);
+        this.larg = mapa.widthInPixels;
+        this.alt = mapa.heightInPixels;
+
+        this.fornos = {};     // id do forno -> desenho (sprite e barra de tempo)
+        this.escuro = null;
+        this.anims.create({   // fogo piscando
+          key: "queimando", frames: this.anims.generateFrameNumbers("sprites", { frames: [2, 3] }),
+          frameRate: 4, repeat: -1,
+        });
+        this.faixa = this.add.text(this.larg / 2, 9, "⏳ Aguardando o Mestre", {
+          fontSize: "8px", color: "#ffffff", backgroundColor: "#00000099",
+          padding: { x: 5, y: 2 }, resolution: 2,
+        }).setOrigin(0.5).setDepth(10);
+
+        cena = this;
+        fila.splice(0).forEach(([nome, args]) => this[nome](...args));
+      }
+
+      // ----- apoio -----
+      lote(i) { return this.lotes[i % this.lotes.length]; }
+
+      visual(id) {              // desenho do forno `id` (criado na primeira vez que aparece)
+        if (!this.fornos[id]) {
+          const { x, y } = this.lote(id);
+          this.fornos[id] = {
+            x, y, token: 0,
+            sprite: this.add.sprite(x, y, "sprites", 0),
+            fundo: this.add.rectangle(x - 10, y + 17, 20, 3, 0x333333).setOrigin(0, 0.5).setVisible(false),
+            barra: this.add.rectangle(x - 10, y + 17, 20, 3, 0xffd54a).setOrigin(0, 0.5).setVisible(false),
+          };
+        }
+        return this.fornos[id];
+      }
+
+      barraDeTempo(v, cor, de, ate, segundos) {   // anima a barra de `de` até `ate` (0 a 1)
+        v.fundo.setVisible(true);
+        v.barra.setFillStyle(cor).setVisible(true);
+        v.barra.scaleX = de;
+        this.tweens.add({ targets: v.barra, scaleX: ate, duration: Math.max(segundos, 0.05) * 1000 });
+      }
+
+      // Põe o forno `f` ({id, situacao, restante}) na situação que o SERVIDOR informou.
+      definirForno(f, estado) {
+        const v = this.visual(f.id);
+        v.token++;
+        this.tweens.killTweensOf([v.sprite, v.barra]);
+        v.sprite.anims.stop();
+        v.sprite.setAlpha(1).setScale(1).setFrame(0);
+        v.fundo.setVisible(false);
+        v.barra.setVisible(false);
+        const total = { obra: estado.tempo_obra, queimando: estado.tempo_queima, pronta: estado.janela }[f.situacao] || 0;
+        const falta = Math.min(f.restante || 0, total);
+        if (f.situacao === "obra") {
+          v.sprite.setFrame(1);                                   // canteiro de obras
+          this.barraDeTempo(v, 0xffd54a, 1 - falta / total, 1, falta);
+        } else if (f.situacao === "queimando") {
+          v.sprite.play("queimando");                             // fogo e fumaça
+          this.barraDeTempo(v, 0xff8a22, 1 - falta / total, 1, falta);
+        } else if (f.situacao === "pronta") {
+          v.sprite.setFrame(4);                                   // brilhando: retire já!
+          this.barraDeTempo(v, 0xe53935, falta / total, 0, falta); // a barra ESVAZIA até trincar
+          this.tweens.add({ targets: v.sprite, scale: { from: 1, to: 1.08 }, yoyo: true, repeat: -1, duration: 300 });
+        }
+      }
+
+      flutuar(texto, x, y, cor) {
+        const t = this.add.text(x, y, texto, {
+          fontSize: "8px", color: cor, fontStyle: "bold", stroke: "#ffffff",
+          strokeThickness: 2, resolution: 2,
+        }).setOrigin(0.5).setDepth(8);
+        this.tweens.add({ targets: t, y: y - 16, alpha: 0, duration: 1400, onComplete: () => t.destroy() });
+      }
+
+      // ----- um método para cada evento do servidor -----
+      mostrarEstado(estado) {                 // estado.sincronizado
+        estado.fornos.forEach((f) => this.definirForno(f, estado));
+        if (estado.fase === "aberta") this.vilaIniciada();
+        if (estado.fase === "encerrada") this.vilaEncerrada();
+      }
+      vilaIniciada() {                        // vila.iniciada
+        this.faixa.setText("☀️ Temporada aberta");
+      }
+      obraIniciada(estado, id) {              // construcao.iniciada
+        this.definirForno(achar(estado, id), estado);
+        this.flutuar("-" + estado.custo + " 🟤", this.barreiro.x, this.barreiro.y, "#b00020");
+      }
+      obraConcluida(estado, id) {             // construcao.concluida
+        this.definirForno(achar(estado, id), estado);
+        const v = this.visual(id);
+        this.tweens.add({ targets: v.sprite, scale: { from: 0.3, to: 1 }, duration: 400, ease: "Back.Out" });
+        this.flutuar("🏺 Forno pronto!", v.x, v.y - 20, "#1b5e20");
+      }
+      recursoProduzido(estado) {              // recurso.produzido
+        this.flutuar("+" + estado.producao + " 🟤", this.barreiro.x, this.barreiro.y, "#7a4a2a");
+      }
+      fornadaIniciada(estado, id) {           // fornada.iniciada
+        this.definirForno(achar(estado, id), estado);
+        this.flutuar("-" + estado.custo_fornada + " 🟤", this.visual(id).x, this.visual(id).y - 20, "#b00020");
+      }
+      fornadaPronta(estado, id) {             // fornada.pronta
+        this.definirForno(achar(estado, id), estado);
+        this.flutuar("🔥 Retire já!", this.visual(id).x, this.visual(id).y - 20, "#c62828");
+      }
+      fornadaRetirada(estado, id, telhas) {   // fornada.retirada
+        this.definirForno(achar(estado, id), estado);
+        this.flutuar("+" + telhas + " 🧱", this.visual(id).x, this.visual(id).y - 20, "#1b5e20");
+      }
+      telhaTrincada(estado, id, perdidas) {   // telha.trincada
+        this.definirForno(achar(estado, id), estado);
+        const v = this.visual(id);
+        v.sprite.setFrame(5);                                     // forno rachado por um instante
+        const meu = v.token;
+        this.time.delayedCall(1500, () => { if (v.token === meu) v.sprite.setFrame(0); });
+        this.cameras.main.shake(150, 0.004);
+        this.flutuar("💥 Trincou! -" + perdidas + " 🧱", v.x, v.y - 20, "#c62828");
+      }
+      recusado(motivo) {                      // operacao.recusada (só quem pediu)
+        this.cameras.main.shake(180, 0.006);
+        this.flutuar("✋ " + motivo, this.larg / 2, this.alt - 28, "#b00020");
+      }
+      vilaEncerrada() {                       // vila.encerrada
+        this.faixa.setText("🌙 Temporada encerrada");
+        if (!this.escuro) {
+          this.escuro = this.add.rectangle(this.larg / 2, this.alt / 2, this.larg, this.alt, 0x000033, 0.35).setDepth(5);
+        }
+      }
+    }
+
+    return {
+      iniciar(idContainer) {
+        if (partida) return;
+        partida = new Phaser.Game({
+          type: Phaser.AUTO, parent: idContainer, width: 576, height: 288,
+          pixelArt: true, backgroundColor: "#7bb661", scene: VilaScene, audio: { noAudio: true },
+        });
+      },
+      mostrarEstado: (...a) => chamar("mostrarEstado", ...a),
+      vilaIniciada: (...a) => chamar("vilaIniciada", ...a),
+      obraIniciada: (...a) => chamar("obraIniciada", ...a),
+      obraConcluida: (...a) => chamar("obraConcluida", ...a),
+      recursoProduzido: (...a) => chamar("recursoProduzido", ...a),
+      fornadaIniciada: (...a) => chamar("fornadaIniciada", ...a),
+      fornadaPronta: (...a) => chamar("fornadaPronta", ...a),
+      fornadaRetirada: (...a) => chamar("fornadaRetirada", ...a),
+      telhaTrincada: (...a) => chamar("telhaTrincada", ...a),
+      recusado: (...a) => chamar("recusado", ...a),
+      vilaEncerrada: (...a) => chamar("vilaEncerrada", ...a),
+    };
+  }
+</script>
+
+<script>
+  // =====================================================================
+  //  A APLICAÇÃO (Vue + Socket.IO)
+  //  REGRA DE OURO: o cliente NUNCA altera o estado por conta própria.
+  //  Ele só PEDE (pedir) e, quando o servidor emite um FATO, ESCUTA (ouvir),
+  //  atualiza o estado e reage.
+  // =====================================================================
+  const { createApp, ref, reactive, computed, nextTick } = Vue;
+
+  createApp({
+    setup() {
+      const nome = ref("");
+      const papel = ref("");
+      const conectado = ref(false);
+      const estado = reactive({
+        fase: "aguardando", argila: 0, telhas: 0, trabalhadores: 0, limite: 0,
+        producao: 0, intervalo: 0, tempo_obra: 0, custo: 0, custo_fornada: 0,
+        tempo_queima: 0, janela: 0, telhas_por_fornada: 0, max_fornos: 0,
+        concluidas: 0, em_obra: 0, trincadas: 0, fornos: [], placar: {},
+      });
+      const avisos = ref([]);
+      const eventos = ref([]);              // linha do tempo do painel de eventos
+      const contadores = reactive({});      // quantas vezes cada evento ocorreu
+      const ocultarProducao = ref(false);
+      const eventosVisiveis = computed(() =>
+        eventos.value.filter((e) => !(ocultarProducao.value && e.nome === "recurso.produzido")));
+      const jogo = criarJogo();      // a olaria desenhada (Phaser)
+      let socket = null;
+
+      const porMinuto = computed(() =>
+        estado.intervalo ? Math.round(estado.producao * 60 / estado.intervalo) : 0);
+      const queimando = computed(() => estado.fornos.filter((f) => f.situacao === "queimando").length);
+      const prontas = computed(() => estado.fornos.filter((f) => f.situacao === "pronta").length);
+      const placar = computed(() => Object.entries(estado.placar).sort((a, b) => b[1] - a[1]));
+
+      function avisar(texto, tipo = "info") {
+        avisos.value.unshift({ texto, tipo });
+        avisos.value = avisos.value.slice(0, 6);
+      }
+
+      function atualizar(d) {
+        Object.assign(estado, d.estado);   // copia o estado enviado pelo servidor
+      }
+
+      // ----- painel de eventos -----
+      function resumir(d) {                // transforma os dados do evento em texto curto
+        if (!d) return "";
+        const { estado: e, causa, ...resto } = d;
+        const partes = Object.entries(resto).map(([k, v]) => k + ": " + v);
+        if (e) partes.push("argila " + e.argila + ", telhas " + e.telhas + ", oleiros " + e.trabalhadores + "/" + e.limite);
+        return partes.join(" · ");
+      }
+      function registrar(sentido, nome, dados, reacao = "") {
+        const tipo = /_solicitad[ao]$/.test(nome) ? "pedido" : (nome === "operacao.recusada" ? "recusa" : "fato");
+        contadores[nome] = (contadores[nome] || 0) + 1;
+        eventos.value.unshift({ hora: new Date().toLocaleTimeString(), sentido: sentido, nome, tipo,
+          causa: (dados && dados.causa) || "", dados: resumir(dados), reacao });
+        eventos.value = eventos.value.slice(0, 60);
+      }
+
+      // OUVIR (on): registra o evento no painel e executa a reação do cliente
+      function ouvir(nome, reacao, funcao) {
+        socket.on(nome, (d) => { registrar("recebido", nome, d, reacao); funcao(d); });
+      }
+      // PEDIR (emit): registra o evento no painel e o envia ao servidor
+      function pedir(nome, dados) {
+        registrar("enviado", nome, dados);
+        if (dados === undefined) socket.emit(nome); else socket.emit(nome, dados);
+      }
+
+      function entrar(p) {
+        papel.value = p;
+        socket = io({ auth: { nome: nome.value || "Anônimo", papel: p } });
+        socket.on("connect", () => {
+          conectado.value = true;
+          nextTick(() => jogo.iniciar("jogo"));   // a vila desenhada começa quando a tela aparece
+        });
+        socket.on("disconnect", () => avisar("Conexão com o servidor perdida. Recarregue a página.", "erro"));
+
+        // ===== ESCUTAS (on): o cliente reage aos FATOS do servidor =====
+        // ouvir(evento, "o que o cliente faz ao receber", função)
+
+        // Quem acabou de entrar recebe o estado atual só para ele: precisa desenhar o que já existe.
+        ouvir("estado.sincronizado", "guarda o estado e desenha a olaria como está agora", (d) => {
+          atualizar(d);
+          jogo.mostrarEstado(d.estado);
+        });
+      }
+
+      // ===== PEDIDOS (emit): o cliente PEDE algo ao servidor; quem decide é o servidor =====
+
+      return { nome, papel, conectado, estado, avisos, eventosVisiveis, contadores, ocultarProducao,
+               porMinuto, queimando, prontas, placar,
+               entrar };
+    }
+  }).mount("#app");
+</script>
+</body>
+</html>

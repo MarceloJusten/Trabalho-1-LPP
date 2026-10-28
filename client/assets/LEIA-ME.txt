@@ -1,0 +1,31 @@
+ASSETS DA OLARIA
+================
+
+Base: arte original do kit do professor (uso livre nos trabalhos da disciplina).
+Peças novas da olaria: desenhadas por código em tools/gerar_arte.py.
+
+tileset-vila.png     peças do cenário, 16x16 px (64 peças, 16 por linha)
+sprites-olaria.png   forno e canteiro, 32x32 px (6 quadros, veja abaixo)
+sprites-vila.png     casa e canteiro do kit original (não é mais usado pela olaria)
+vila.json            o mapa (formato Tiled), 18 x 9 peças. Abra no Tiled para editar.
+
+PEÇAS DO TILESET (número mostrado no Tiled = índice + 1)
+  0, 1, 2     grama (lisa, com tufos, com flores)
+  8 a 23      CAMINHO. Número = 8 + soma dos lados em que há mais caminho:
+              Norte=1, Leste=2, Sul=4, Oeste=8
+  24 a 39     ÁGUA. Mesma regra: 24 + soma dos lados com mais água
+  40 árvore   41 arbusto   42 pedra   43 toco
+  44 montes de ARGILA        (era: toras)
+  45 telhas secando no secador (era: horta de cenoura)
+  46 BARREIRO, o poço de argila (era: horta de trigo)
+  47 cerca
+
+QUADROS DE sprites-olaria.png
+  0 forno livre   1 canteiro (obra)   2 e 3 forno queimando (animação)
+  4 fornada pronta, pedindo retirada   5 fornada trincada
+
+CAMADAS DO MAPA
+  chao         grama, caminho e água
+  decoracao    árvores, pedras, argila, secador, cerca
+  pontos       (objetos) lote1 a lote6 = onde ficam os fornos (6 no máximo)
+                          barreiro = de onde sobem os "+10 argila"
