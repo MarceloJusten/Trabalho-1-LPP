@@ -1,6 +1,6 @@
 # Especificação — Olaria em Tempo Real
 
-**Integrantes:** Marcelo Henrique Justen (@MarceloJusten-github) e Julio Max
+**Integrantes:** Marcelo Henrique Justen (@MarceloJusten-github) e Julio Max 
 **Tipo de vila (sorteio):** 11 — Olaria (argila → telhas; a telha trinca se ficar muito tempo no forno)
 
 > Este documento foi escrito ANTES do código. Descreve o comportamento na linguagem da olaria e não cita tecnologia.

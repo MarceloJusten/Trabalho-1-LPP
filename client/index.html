@@ -87,6 +87,13 @@
              🔥 {{ queimando }} queimando · ⏳ {{ prontas }} para retirar</p>
         </section>
 
+        <section>
+          <template v-if="papel === 'mestre'">
+            <button @click="abrirVila">Abrir temporada</button>
+            <button @click="encerrarVila" class="claro">Encerrar temporada</button>
+          </template>
+        </section>
+
         <ul class="avisos">
           <li v-for="a in avisos" :class="a.tipo">{{ a.texto }}</li>
         </ul>
@@ -399,13 +406,37 @@
           atualizar(d);
           jogo.mostrarEstado(d.estado);
         });
+
+        // O Mestre abriu a temporada: todos precisam saber que as ações liberaram.
+        ouvir("vila.iniciada", "muda a faixa para temporada aberta", (d) => {
+          atualizar(d);
+          avisar("A temporada começou! O barreiro já está rendendo argila.", "ok");
+          jogo.vilaIniciada();
+        });
+
+        // Só quem pediu recebe a recusa: o cliente avisa o motivo, sem mudar o estado.
+        ouvir("operacao.recusada", "avisa o motivo e a tela treme", (d) => {
+          avisar(d.motivo, "erro");
+          jogo.recusado(d.motivo);
+        });
+
+        // O Mestre encerrou: o cliente trava a vila e mostra o resultado.
+        ouvir("vila.encerrada", "escurece a vila e bloqueia novas ações", (d) => {
+          atualizar(d);
+          const melhor = Object.entries(d.estado.placar).sort((a, b) => b[1] - a[1])[0];
+          avisar("Temporada encerrada. " + d.estado.telhas + " telhas produzidas" +
+                 (melhor ? " · melhor oleiro: " + melhor[0] + " (" + melhor[1] + ")" : "") + ".");
+          jogo.vilaEncerrada();
+        });
       }
 
       // ===== PEDIDOS (emit): o cliente PEDE algo ao servidor; quem decide é o servidor =====
+      function abrirVila()    { pedir("vila.abertura_solicitada"); }          // só o Mestre
+      function encerrarVila() { pedir("vila.encerramento_solicitado"); }      // só o Mestre
 
       return { nome, papel, conectado, estado, avisos, eventosVisiveis, contadores, ocultarProducao,
                porMinuto, queimando, prontas, placar,
-               entrar };
+               entrar, abrirVila, encerrarVila };
     }
   }).mount("#app");
 </script>

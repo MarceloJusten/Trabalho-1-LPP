@@ -79,6 +79,15 @@ def fato(causa, **extras):
     return {"estado": instantaneo(), "causa": causa, **extras}
 
 
+async def recusar(sid, motivo, causa):
+    """operacao.recusada: responde SÓ a quem pediu."""
+    await sio.emit("operacao.recusada", {"motivo": motivo, "causa": causa}, to=sid)
+
+
+def quem(sid):
+    return jogadores.get(sid, {"nome": "Anônimo", "papel": "jogador"})
+
+
 # ============================ CONEXÃO (Etapa 1) ===============================
 @sio.event
 async def connect(sid, environ, auth):
@@ -94,3 +103,32 @@ async def connect(sid, environ, auth):
 @sio.event
 async def disconnect(sid):
     jogadores.pop(sid, None)
+
+
+# ====================== O MESTRE ABRE A TEMPORADA (Etapa 2) ===================
+@sio.on("vila.abertura_solicitada")          # PEDIDO do Mestre
+async def abrir_vila(sid, dados=None):
+    pedido = "vila.abertura_solicitada"
+    if quem(sid)["papel"] != "mestre":
+        await recusar(sid, "Só o Mestre pode abrir a temporada", pedido)
+        return
+    if estado["fase"] != "aguardando":
+        await recusar(sid, "A temporada já foi aberta", pedido)
+        return
+    estado["fase"] = "aberta"
+    # FATO para todos
+    await sio.emit("vila.iniciada", fato(pedido))
+
+
+# ============================ ENCERRAR (Etapa 6) ==============================
+@sio.on("vila.encerramento_solicitado")      # PEDIDO do Mestre
+async def encerrar_vila(sid, dados=None):
+    pedido = "vila.encerramento_solicitado"
+    if quem(sid)["papel"] != "mestre":
+        await recusar(sid, "Só o Mestre pode encerrar a temporada", pedido)
+        return
+    if estado["fase"] != "aberta":
+        await recusar(sid, "A temporada não está aberta", pedido)
+        return
+    estado["fase"] = "encerrada"             # os temporizadores percebem e param
+    await sio.emit("vila.encerrada", fato(pedido))
