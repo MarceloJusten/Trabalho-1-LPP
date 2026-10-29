@@ -3,7 +3,7 @@
 Trabalho 01 — Programação Orientada a Eventos · LPP 2026/2 · tipo de vila: Olaria
 
 ## Integrantes
-- Marcelo Henrique Justen — @MarceloJustengithub
+- Marcelo Henrique Justen — @MarceloJusten-github
 - Julio Max
 
 ## Como executar
